@@ -325,6 +325,12 @@ private fun SharedPdfDockIcon(
                 tint = tintColor,
                 modifier = Modifier.size(iconSizeDp),
             )
+            PdfInkTool.RECTANGLE -> SharedPdfAndroidPathIcon(pathData = SharedPdfAndroidRectPath, tint = tintColor, modifier = Modifier.size(iconSizeDp))
+            PdfInkTool.ELLIPSE -> SharedPdfAndroidPathIcon(pathData = SharedPdfAndroidEllipsePath, tint = tintColor, modifier = Modifier.size(iconSizeDp))
+            PdfInkTool.LINE -> SharedPdfAndroidPathIcon(pathData = SharedPdfAndroidLinePath, tint = tintColor, modifier = Modifier.size(iconSizeDp))
+            PdfInkTool.ARROW -> SharedPdfAndroidPathIcon(pathData = SharedPdfAndroidArrowPath, tint = tintColor, modifier = Modifier.size(iconSizeDp))
+            PdfInkTool.IMAGE -> SharedPdfAndroidPathIcon(pathData = SharedPdfAndroidImagePath, tint = tintColor, modifier = Modifier.size(iconSizeDp))
+            PdfInkTool.STICKY_NOTE -> SharedPdfAndroidPathIcon(pathData = SharedPdfAndroidStickyNotePath, tint = tintColor, modifier = Modifier.size(iconSizeDp))
             PdfInkTool.NONE -> SharedPdfAndroidPathIcon(
                 pathData = SharedPdfAndroidTouchAppPath,
                 tint = tintColor,
@@ -368,9 +374,11 @@ fun SharedPdfAndroidToolSettingsPopup(
 ) {
     val isEraser = selectedTool == PdfInkTool.ERASER
     val isHighlighter = selectedTool in SharedPdfAnnotationHighlighterTools
+    val isShape = selectedTool in listOf(PdfInkTool.RECTANGLE, PdfInkTool.ELLIPSE, PdfInkTool.LINE, PdfInkTool.ARROW)
     val panel = when {
         isEraser -> SharedPdfAnnotationSettingsPanel.ERASER
         isHighlighter -> SharedPdfAnnotationSettingsPanel.HIGHLIGHTER
+        isShape -> SharedPdfAnnotationSettingsPanel.SHAPES
         else -> SharedPdfAnnotationSettingsPanel.PEN
     }
     val panelTools = when (panel) {
@@ -384,6 +392,12 @@ fun SharedPdfAndroidToolSettingsPopup(
             PdfInkTool.HIGHLIGHTER_ROUND,
         )
         SharedPdfAnnotationSettingsPanel.ERASER -> listOf(PdfInkTool.ERASER)
+        SharedPdfAnnotationSettingsPanel.SHAPES -> listOf(
+            PdfInkTool.RECTANGLE,
+            PdfInkTool.ELLIPSE,
+            PdfInkTool.LINE,
+            PdfInkTool.ARROW,
+        )
     }
     Box(modifier = modifier) {
         SharedPdfAnnotationToolSettingsPanel(

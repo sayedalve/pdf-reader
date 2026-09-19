@@ -190,7 +190,10 @@ object SharedPdfInkRenderer {
     ): Boolean {
         return when (annotation.kind) {
             PdfAnnotationKind.HIGHLIGHT,
-            PdfAnnotationKind.TEXT -> annotation.allBounds().any { it.contains(hitPoint.x, hitPoint.y) }
+            PdfAnnotationKind.TEXT,
+            PdfAnnotationKind.SHAPE,
+            PdfAnnotationKind.IMAGE,
+            PdfAnnotationKind.STICKY_NOTE -> annotation.allBounds().any { it.contains(hitPoint.x, hitPoint.y) }
             PdfAnnotationKind.INK -> isInkAnnotationHit(
                 annotation = annotation,
                 hitPoint = hitPoint,
@@ -354,7 +357,13 @@ fun PdfInkTool.sharedPdfStrokeWidthRange(): ClosedFloatingPointRange<Float> {
         PdfInkTool.TEXT -> 0.01f..0.08f
         PdfInkTool.PEN,
         PdfInkTool.FOUNTAIN_PEN,
-        PdfInkTool.PENCIL -> 0.001f..0.015f
+        PdfInkTool.PENCIL,
+        PdfInkTool.RECTANGLE,
+        PdfInkTool.ELLIPSE,
+        PdfInkTool.LINE,
+        PdfInkTool.ARROW,
+        PdfInkTool.IMAGE,
+        PdfInkTool.STICKY_NOTE -> 0.001f..0.015f
     }
 }
 
