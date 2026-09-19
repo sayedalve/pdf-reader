@@ -138,6 +138,7 @@ object SharedPdfInkRenderer {
                     blendMode = annotation.tool.blendMode
                 )
             }
+            else -> null
         }
     }
 
