@@ -310,6 +310,7 @@ dependencies {
 
     implementation("io.legere:pdfiumandroid:2.0.0")
     implementation("org.zwobble.mammoth:mammoth:1.4.2")
+    implementation(libs.pdfbox.android)
 
     implementation("com.materialkolor:material-kolor:5.0.0-alpha07")
 

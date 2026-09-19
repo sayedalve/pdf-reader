@@ -24,6 +24,7 @@ data class SharedPdfLegacyInkAnnotation(
     val strokeWidth: Float,
     val points: List<PdfPagePoint>,
     val note: String? = null,
+    val imagePath: String? = null,
 )
 
 data class SharedPdfLegacyInkDecodeResult(
@@ -55,6 +56,7 @@ object SharedPdfLegacyInkCodec {
                 put("color", JsonPrimitive(annotation.colorArgb))
                 put("strokeWidth", JsonPrimitive(annotation.strokeWidth.toDouble()))
                 annotation.note?.takeIf { it.isNotBlank() }?.let { put("note", JsonPrimitive(it)) }
+                annotation.imagePath?.takeIf { it.isNotBlank() }?.let { put("imagePath", JsonPrimitive(it)) }
                 put("points", JsonArray(annotation.points.take(MAX_POINTS_PER_ANNOTATION).map { point ->
                     JsonObject(linkedMapOf(
                         "x" to JsonPrimitive(point.x.roundedLegacyCoordinate()),
@@ -121,6 +123,7 @@ object SharedPdfLegacyInkCodec {
                     strokeWidth = strokeWidth,
                     points = points,
                     note = obj.string("note"),
+                    imagePath = obj.string("imagePath"),
                 )
             )
         }

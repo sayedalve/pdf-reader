@@ -52,22 +52,87 @@ object SharedPdfAnnotationExportMapper {
     }
 
     private fun SharedPdfAnnotation.toInkExportOrNull(): SharedPdfInkAnnotationExport? {
-        if (kind != PdfAnnotationKind.INK) return null
+        if (kind != PdfAnnotationKind.INK && kind != PdfAnnotationKind.SHAPE) return null
         if (tool == PdfInkTool.NONE ||
             tool == PdfInkTool.ERASER ||
             tool == PdfInkTool.TEXT ||
-            points.size < 2
+            tool == PdfInkTool.IMAGE ||
+            tool == PdfInkTool.STICKY_NOTE
         ) return null
+
+        val exportPoints = if (kind == PdfAnnotationKind.SHAPE) {
+            generateShapePoints()
+        } else {
+            points
+        }
+
+        if (exportPoints.size < 2) return null
 
         return SharedPdfInkAnnotationExport(
             id = id,
             pageIndex = pageIndex,
             tool = tool,
-            points = points,
+            points = exportPoints,
             colorArgb = colorArgb,
             strokeWidth = strokeWidth,
             contents = note?.trim().orEmpty()
         )
+    }
+
+    private fun SharedPdfAnnotation.generateShapePoints(): List<PdfPagePoint> {
+        if (points.size < 2) return points
+        val start = points.first()
+        val end = points.last()
+        val time = start.timestamp
+        return when (tool) {
+            PdfInkTool.LINE -> listOf(start, end)
+            PdfInkTool.RECTANGLE -> listOf(
+                start,
+                PdfPagePoint(end.x, start.y, time),
+                end,
+                PdfPagePoint(start.x, end.y, time),
+                start
+            )
+            PdfInkTool.ELLIPSE -> {
+                // Approximate ellipse with 32 points
+                val cx = (start.x + end.x) / 2
+                val cy = (start.y + end.y) / 2
+                val rx = kotlin.math.abs(end.x - start.x) / 2
+                val ry = kotlin.math.abs(end.y - start.y) / 2
+                val count = 32
+                List(count + 1) { i ->
+                    val angle = 2 * kotlin.math.PI * i / count
+                    PdfPagePoint(
+                        x = (cx + rx * kotlin.math.cos(angle)).toFloat(),
+                        y = (cy + ry * kotlin.math.sin(angle)).toFloat(),
+                        timestamp = time
+                    )
+                }
+            }
+            PdfInkTool.ARROW -> {
+                // Line + Arrowhead
+                val dx = end.x - start.x
+                val dy = end.y - start.y
+                val length = kotlin.math.sqrt((dx * dx + dy * dy).toDouble()).toFloat()
+                if (length < 0.001f) return listOf(start, end)
+                val headLength = kotlin.math.min(length * 0.3f, 0.05f)
+                val angle = kotlin.math.atan2(dy.toDouble(), dx.toDouble())
+                val headAngle = kotlin.math.PI / 6
+                
+                val p1 = PdfPagePoint(
+                    x = (end.x - headLength * kotlin.math.cos(angle - headAngle)).toFloat(),
+                    y = (end.y - headLength * kotlin.math.sin(angle - headAngle)).toFloat(),
+                    timestamp = time
+                )
+                val p2 = PdfPagePoint(
+                    x = (end.x - headLength * kotlin.math.cos(angle + headAngle)).toFloat(),
+                    y = (end.y - headLength * kotlin.math.sin(angle + headAngle)).toFloat(),
+                    timestamp = time
+                )
+                listOf(start, end, p1, end, p2)
+            }
+            else -> points
+        }
     }
 
     private fun SharedPdfAnnotation.toHighlightExportOrNull(

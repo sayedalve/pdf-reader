@@ -14,7 +14,10 @@ import kotlin.math.roundToInt
 enum class PdfAnnotationKind {
     INK,
     TEXT,
-    HIGHLIGHT
+    HIGHLIGHT,
+    SHAPE,
+    IMAGE,
+    STICKY_NOTE
 }
 
 enum class PdfHighlightColor(val color: Color) {
@@ -32,7 +35,13 @@ enum class PdfInkTool {
     ERASER,
     FOUNTAIN_PEN,
     PENCIL,
-    TEXT
+    TEXT,
+    RECTANGLE,
+    ELLIPSE,
+    LINE,
+    ARROW,
+    IMAGE,
+    STICKY_NOTE
 }
 
 @Serializable
@@ -135,7 +144,8 @@ data class SharedPdfAnnotation(
     val fontName: String? = null,
     val rangeStartIndex: Int? = null,
     val rangeEndIndex: Int? = null,
-    val createdAt: Long = 0L
+    val createdAt: Long = 0L,
+    val imagePath: String? = null
 )
 
 fun sharedPdfHighlightAnnotation(
@@ -346,6 +356,12 @@ object SharedPdfAnnotationDefaults {
             PdfInkTool.HIGHLIGHTER_ROUND -> PdfToolConfig(highlighterPalette[1], 0.035f)
             PdfInkTool.ERASER -> PdfToolConfig(0x00000000, 0.03f)
             PdfInkTool.TEXT -> PdfToolConfig(0xFF000000.toInt(), 0.02f)
+            PdfInkTool.RECTANGLE,
+            PdfInkTool.ELLIPSE,
+            PdfInkTool.LINE,
+            PdfInkTool.ARROW -> PdfToolConfig(0xFFFF0000.toInt(), 0.015f)
+            PdfInkTool.IMAGE,
+            PdfInkTool.STICKY_NOTE -> PdfToolConfig(0x00000000, 0f)
         }
     }
 }

@@ -1,0 +1,238 @@
+﻿package com.aryan.reader.pdf.editor
+
+import android.content.ContentValues
+import android.content.Context
+import android.graphics.Bitmap
+import android.net.Uri
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
+import androidx.core.content.FileProvider
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
+
+data class OrganizerPage(
+    val originalIndex: Int,
+    val rotation: Int = 0,
+    val thumbnail: Bitmap? = null
+)
+
+data class PageOrganizerUiState(
+    val sourceFileName: String = "",
+    val sourceUri: Uri? = null,
+    val pages: List<OrganizerPage> = emptyList(),
+    val selectedIds: Set<Int> = emptySet(),
+    val isLoading: Boolean = false,
+    val isSaving: Boolean = false,
+    val resultMessage: String? = null,
+    val errorMessage: String? = null,
+    val lastOutputUri: Uri? = null
+)
+
+class PageOrganizerViewModel : ViewModel() {
+    private val editor = PdfPageEditorImpl()
+    private val _uiState = MutableStateFlow(PageOrganizerUiState())
+    val uiState: StateFlow<PageOrganizerUiState> = _uiState.asStateFlow()
+
+    fun onSelectFile(context: Context, uri: Uri) {
+        _uiState.value = PageOrganizerUiState(isLoading = true)
+        viewModelScope.launch {
+            try {
+                val name = queryFileName(context, uri) ?: "Unknown.pdf"
+                val pages = withContext(Dispatchers.IO) { renderThumbnails(context, uri) }
+                _uiState.value = PageOrganizerUiState(
+                    sourceFileName = name,
+                    sourceUri = uri,
+                    pages = pages.mapIndexed { i, bmp -> OrganizerPage(originalIndex = i, thumbnail = bmp) }
+                )
+            } catch (e: Exception) {
+                _uiState.value = PageOrganizerUiState(errorMessage = "Failed to open document")
+            }
+        }
+    }
+
+    fun rotatePage(index: Int, deltaDegrees: Int = 90) {
+        val pages = _uiState.value.pages.toMutableList()
+        if (index !in pages.indices) return
+        val current = pages[index]
+        pages[index] = current.copy(rotation = (((current.rotation + deltaDegrees) % 360) + 360) % 360)
+        _uiState.value = _uiState.value.copy(pages = pages, resultMessage = null)
+    }
+
+    fun deletePage(index: Int) {
+        val pages = _uiState.value.pages.toMutableList()
+        if (index !in pages.indices || pages.size <= 1) return
+        val removed = pages.removeAt(index)
+        _uiState.value = _uiState.value.copy(
+            pages = pages,
+            selectedIds = _uiState.value.selectedIds - removed.originalIndex,
+            resultMessage = null
+        )
+    }
+
+    fun toggleSelect(id: Int) {
+        val sel = _uiState.value.selectedIds.toMutableSet()
+        if (!sel.add(id)) sel.remove(id)
+        _uiState.value = _uiState.value.copy(selectedIds = sel, resultMessage = null)
+    }
+
+    fun clearSelection() {
+        _uiState.value = _uiState.value.copy(selectedIds = emptySet())
+    }
+
+    fun selectAll() {
+        _uiState.value = _uiState.value.copy(selectedIds = _uiState.value.pages.map { it.originalIndex }.toSet())
+    }
+
+    fun rotateSelected(deltaDegrees: Int = 90) {
+        val sel = _uiState.value.selectedIds
+        if (sel.isEmpty()) return
+        val pages = _uiState.value.pages.map {
+            if (it.originalIndex in sel) it.copy(rotation = (((it.rotation + deltaDegrees) % 360) + 360) % 360) else it
+        }
+        _uiState.value = _uiState.value.copy(pages = pages, resultMessage = null)
+    }
+
+    fun deleteSelected() {
+        val sel = _uiState.value.selectedIds
+        if (sel.isEmpty()) return
+        val pages = _uiState.value.pages.filterNot { it.originalIndex in sel }
+        if (pages.isEmpty()) {
+            _uiState.value = _uiState.value.copy(errorMessage = "Cannot delete all pages")
+            return
+        }
+        _uiState.value = _uiState.value.copy(pages = pages, selectedIds = emptySet(), resultMessage = null)
+    }
+
+    fun movePagesTo(ids: List<Int>, targetIndex: Int) {
+        if (ids.isEmpty()) return
+        val current = _uiState.value.pages
+        val idSet = ids.toSet()
+        val moving = current.filter { it.originalIndex in idSet }
+        if (moving.isEmpty()) return
+        val remaining = current.filterNot { it.originalIndex in idSet }
+        val removedBefore = current.take(targetIndex.coerceIn(0, current.size)).count { it.originalIndex in idSet }
+        val insertAt = (targetIndex - removedBefore).coerceIn(0, remaining.size)
+        val result = remaining.toMutableList().apply { addAll(insertAt, moving) }
+        _uiState.value = _uiState.value.copy(pages = result, resultMessage = null)
+    }
+
+    fun save(context: Context, fileName: String, overrideUri: Uri? = null) {
+        val src = _uiState.value.sourceUri ?: return
+        val pages = _uiState.value.pages
+        if (pages.isEmpty()) return
+        _uiState.value = _uiState.value.copy(isSaving = true, errorMessage = null, resultMessage = null, lastOutputUri = null)
+        viewModelScope.launch {
+            try {
+                val target = if (fileName.endsWith(".pdf", true)) fileName else "fileName.pdf"
+                val outUri = withContext(Dispatchers.IO) { createOutputUri(context, target, overrideUri) }
+                val order = pages.map { it.originalIndex }
+                val rotations = pages.associate { it.originalIndex to it.rotation }.filterValues { it != 0 }
+                withContext(Dispatchers.IO) { editor.applyPageEdits(context, src, order, rotations, outUri) }
+
+                _uiState.value = _uiState.value.copy(
+                    isSaving = false,
+                    lastOutputUri = outUri,
+                    resultMessage = "Successfully saved organized PDF"
+                )
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(isSaving = false, errorMessage = "Failed to save PDF")
+            }
+        }
+    }
+
+    fun extractSelected(context: Context) {
+        val src = _uiState.value.sourceUri ?: return
+        val sel = _uiState.value.selectedIds
+        if (sel.isEmpty()) return
+        val pagesToExtract = _uiState.value.pages.filter { it.originalIndex in sel }
+        if (pagesToExtract.isEmpty()) return
+        _uiState.value = _uiState.value.copy(isSaving = true, errorMessage = null, resultMessage = null, lastOutputUri = null)
+        
+        viewModelScope.launch {
+            try {
+                val target = "Extracted_Pages.pdf"
+                val outUri = withContext(Dispatchers.IO) { createOutputUri(context, target, null) }
+                val order = pagesToExtract.map { it.originalIndex }
+                val rotations = pagesToExtract.associate { it.originalIndex to it.rotation }.filterValues { it != 0 }
+                withContext(Dispatchers.IO) { editor.applyPageEdits(context, src, order, rotations, outUri) }
+
+                _uiState.value = _uiState.value.copy(
+                    isSaving = false,
+                    lastOutputUri = outUri,
+                    resultMessage = "Successfully extracted {pagesToExtract.size} pages"
+                )
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(isSaving = false, errorMessage = "Failed to extract PDF pages")
+            }
+        }
+    }
+
+    fun clearFeedback() {
+        _uiState.value = _uiState.value.copy(resultMessage = null, errorMessage = null)
+    }
+
+    private fun renderThumbnails(context: Context, uri: Uri): List<Bitmap?> {
+        val fd = context.contentResolver.openFileDescriptor(uri, "r") ?: return emptyList()
+        return fd.use {
+            val renderer = android.graphics.pdf.PdfRenderer(it)
+            try {
+                (0 until renderer.pageCount).map { i ->
+                    runCatching {
+                        val page = renderer.openPage(i)
+                        val thumbWidth = 300
+                        val scale = thumbWidth.toFloat() / page.width
+                        val thumbHeight = (page.height * scale).toInt().coerceAtLeast(1)
+                        val bmp = Bitmap.createBitmap(thumbWidth, thumbHeight, Bitmap.Config.ARGB_8888)
+                        bmp.eraseColor(android.graphics.Color.WHITE)
+                        page.render(bmp, null, null, android.graphics.pdf.PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                        page.close()
+                        bmp
+                    }.getOrNull()
+                }
+            } finally {
+                renderer.close()
+            }
+        }
+    }
+
+    private fun queryFileName(context: Context, uri: Uri): String? = try {
+        context.contentResolver.query(uri, null, null, null, null)?.use { c ->
+            if (c.moveToFirst()) {
+                val idx = c.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                if (idx >= 0) c.getString(idx) else null
+            } else null
+        }
+    } catch (_: Exception) { null }
+
+    private fun createOutputUri(context: Context, fileName: String, overrideUri: Uri?): Uri {
+        if (overrideUri != null) {
+            runCatching {
+                val docUri = androidx.documentfile.provider.DocumentFile.fromTreeUri(context, overrideUri)
+                docUri?.createFile("application/pdf", fileName)?.uri
+            }.getOrNull()?.let { return it }
+        }
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val cv = ContentValues().apply {
+                put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+                put(MediaStore.MediaColumns.MIME_TYPE, "application/pdf")
+                put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+            }
+            context.contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, cv)
+                ?: throw IllegalStateException("Unable to create output in Downloads")
+        } else {
+            val dir = context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: context.filesDir
+            if (!dir.exists()) dir.mkdirs()
+            val file = java.io.File(dir, fileName)
+            if (!file.exists()) file.createNewFile()
+            FileProvider.getUriForFile(context, "{context.packageName}.provider", file)
+        }
+    }
+}

@@ -122,20 +122,34 @@ fun SharedPdfAnnotationOverlay(
                             )
                         }
                     }
+                    PdfAnnotationKind.SHAPE -> {
+                        drawSharedPdfShapeAnnotation(annotation, canvasSize)
+                    }
+                    PdfAnnotationKind.IMAGE -> {
+                        // Drawing logic for image placeholder/bounds if needed
+                    }
+                    PdfAnnotationKind.STICKY_NOTE -> {
+                        // Sticky notes are typically drawn as UI overlays or icons
+                    }
                 }
             }
 
             if (activeStroke.isNotEmpty()) {
+                val isShapeTool = activeTool in listOf(PdfInkTool.RECTANGLE, PdfInkTool.ELLIPSE, PdfInkTool.LINE, PdfInkTool.ARROW)
                 val activeAnnotation = SharedPdfAnnotation(
                     id = "active",
                     pageIndex = 0,
-                    kind = PdfAnnotationKind.INK,
+                    kind = if (isShapeTool) PdfAnnotationKind.SHAPE else PdfAnnotationKind.INK,
                     tool = activeTool,
                     points = activeStroke,
                     colorArgb = activeStrokeColorArgb,
                     strokeWidth = activeStrokeWidth
                 )
-                SharedPdfInkRenderer.createRenderData(activeAnnotation, canvasSize)?.let(::drawInkRenderData)
+                if (isShapeTool) {
+                    drawSharedPdfShapeAnnotation(activeAnnotation, canvasSize)
+                } else {
+                    SharedPdfInkRenderer.createRenderData(activeAnnotation, canvasSize)?.let(::drawInkRenderData)
+                }
             }
 
             if (showEraserIndicator && eraserPosition != null) {
@@ -367,6 +381,12 @@ internal const val SharedPdfAndroidTouchAppPath = "M419,880Q391,880 366.5,868Q34
 internal const val SharedPdfAndroidDoNotTouchPath = "M13 10.17l-2.5-2.5V2.25a1.25 1.25 0 0 1 2.5 0v7.92zm7 2.58v-7.5a1.25 1.25 0 0 0-2.5 0V11h-1V3.25a1.25 1.25 0 0 0-2.5 0v7.92l6 6v-4.42zM9.5 4.25C9.5 3.56 8.94 3 8.25 3c-.67 0-1.2.53-1.24 1.18L9.5 6.67V4.25zm3.5 5.92l-2.5-2.5V2.25a1.25 1.25 0 0 1 2.5 0v7.92zm7 2.58v-7.5a1.25 1.25 0 0 0-2.5 0V11h-1V3.25a1.25 1.25 0 0 0-2.5 0v7.92l6 6v-4.42zM9.5 4.25C9.5 3.56 8.94 3 8.25 3c-.67 0-1.2.53-1.24 1.18L9.5 6.67V4.25zm11.69 16.94L2.81 2.81L1.39 4.22l5.63 5.63L7 9.83v4.3c-1.11-.64-2.58-1.47-2.6-1.48c-.17-.09-.34-.14-.54-.14c-.26 0-.5.09-.7.26c-.04.01-1.16 1.11-1.16 1.11l6.8 7.18c.57.6 1.35.94 2.18.94H17c.62 0 1.18-.19 1.65-.52l-.02-.02l1.15 1.15l1.41-1.42z"
 internal const val SharedPdfAndroidUndoPath = "M280,760L280,680L564,680Q627,680 673.5,640Q720,600 720,540Q720,480 673.5,440Q627,400 564,400L312,400L416,504L360,560L160,360L360,160L416,216L312,320L564,320Q661,320 730.5,383Q800,446 800,540Q800,634 730.5,697Q661,760 564,760L280,760Z"
 internal const val SharedPdfAndroidRedoPath = "M396,760Q299,760 229.5,697Q160,634 160,540Q160,446 229.5,383Q299,320 396,320L648,320L544,216L600,160L800,360L600,560L544,504L648,400L396,400Q333,400 286.5,440Q240,480 240,540Q240,600 286.5,640Q333,680 396,680L680,680L680,760L396,760Z"
+internal const val SharedPdfAndroidRectPath = "M200,800L760,800L760,200L200,200L200,800ZM280,720L280,280L680,280L680,720L280,720Z"
+internal const val SharedPdfAndroidEllipsePath = "M480,800Q330,800 225,695Q120,590 120,440Q120,290 225,185Q330,80 480,80Q630,80 735,185Q840,290 840,440Q840,590 735,695Q630,800 480,800ZM480,720Q596,720 678,638Q760,556 760,440Q760,324 678,242Q596,160 480,160Q364,160 282,242Q200,324 200,440Q200,556 282,638Q364,720 480,720Z"
+internal const val SharedPdfAndroidLinePath = "M200,520L760,520L760,440L200,440L200,520Z"
+internal const val SharedPdfAndroidArrowPath = "M440,760L440,440L160,440L160,360L440,360L440,40L800,400L440,760Z"
+internal const val SharedPdfAndroidImagePath = "M200,800L760,800Q793,800 816.5,776.5Q840,753 840,720L840,240Q840,207 816.5,183.5Q793,160 760,160L200,160Q167,160 143.5,183.5Q120,207 120,240L120,720Q120,753 143.5,776.5Q167,800 200,800ZM200,720L760,720L760,240L200,240L200,720ZM260,640L700,640L530,420L400,580L330,480L260,640Z"
+internal const val SharedPdfAndroidStickyNotePath = "M200,800L640,800L840,600L840,240Q840,207 816.5,183.5Q793,160 760,160L200,160Q167,160 143.5,183.5Q120,207 120,240L120,720Q120,753 143.5,776.5Q167,800 200,800ZM760,240L760,560L600,560L600,720L200,720L200,240L760,240Z"
 
 @Composable
 internal fun SharedPdfAndroidPathIcon(
@@ -511,6 +531,12 @@ internal fun SharedPdfToolButton(
                     tint = Color(toolColor).copy(alpha = 1f),
                     modifier = Modifier.size(20.dp)
                 )
+                PdfInkTool.RECTANGLE -> SharedPdfAndroidPathIcon(pathData = SharedPdfAndroidRectPath, tint = Color(toolColor).copy(alpha = 1f), modifier = Modifier.size(20.dp))
+                PdfInkTool.ELLIPSE -> SharedPdfAndroidPathIcon(pathData = SharedPdfAndroidEllipsePath, tint = Color(toolColor).copy(alpha = 1f), modifier = Modifier.size(20.dp))
+                PdfInkTool.LINE -> SharedPdfAndroidPathIcon(pathData = SharedPdfAndroidLinePath, tint = Color(toolColor).copy(alpha = 1f), modifier = Modifier.size(20.dp))
+                PdfInkTool.ARROW -> SharedPdfAndroidPathIcon(pathData = SharedPdfAndroidArrowPath, tint = Color(toolColor).copy(alpha = 1f), modifier = Modifier.size(20.dp))
+                PdfInkTool.IMAGE -> SharedPdfAndroidPathIcon(pathData = SharedPdfAndroidImagePath, tint = Color.White, modifier = Modifier.size(20.dp))
+                PdfInkTool.STICKY_NOTE -> SharedPdfAndroidPathIcon(pathData = SharedPdfAndroidStickyNotePath, tint = Color.White, modifier = Modifier.size(20.dp))
                 PdfInkTool.NONE -> SharedPdfAndroidPathIcon(
                     pathData = SharedPdfAndroidTouchAppPath,
                     tint = Color.White,

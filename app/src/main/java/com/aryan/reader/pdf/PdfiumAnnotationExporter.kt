@@ -113,17 +113,29 @@ internal object PdfiumAnnotationExporter {
                 val pageSizes = runCatching { readPdfPageSizes(sourceFile) }
                     .onFailure { Timber.tag("PdfExportDebug").w(it, "Unable to read page sizes for text raster export.") }
                     .getOrDefault(emptyList())
+                val sharedAnnotations = sharedExportAnnotations(
+                    inkAnnotations = inkAnnotations,
+                    highlights = highlights.orEmpty(),
+                    customHighlightColors = customHighlightColors,
+                    pageSizes = pageSizes
+                )
+
+                val imageRasterOverlays = buildImageRasterOverlays(
+                    context = context,
+                    annotations = sharedAnnotations.filter { it.tool == PdfInkTool.IMAGE },
+                    pageSizes = pageSizes
+                )
+
                 val rasterOverlays = buildTextRasterOverlays(
                     context = context,
                     textBoxes = textBoxes.orEmpty(),
                     richTextPageLayouts = richTextPageLayouts.orEmpty(),
                     pageSizes = pageSizes
-                )
+                ) + imageRasterOverlays
+
                 val payload = buildPayload(
-                    inkAnnotations = inkAnnotations,
+                    sharedAnnotations = sharedAnnotations,
                     textBoxes = emptyList(),
-                    highlights = highlights.orEmpty(),
-                    customHighlightColors = customHighlightColors,
                     richTextPageLayouts = emptyList(),
                     rasterOverlays = rasterOverlays,
                     pageSizes = pageSizes
@@ -218,22 +230,15 @@ internal object PdfiumAnnotationExporter {
 
     @Suppress("UNUSED_PARAMETER")
     internal fun buildPayload(
-        inkAnnotations: Map<Int, List<PdfAnnotation>>,
+        sharedAnnotations: List<SharedPdfAnnotation>,
         textBoxes: List<PdfTextBox>,
-        highlights: List<PdfUserHighlight>,
-        customHighlightColors: Map<PdfHighlightColor, Color> = emptyMap(),
         richTextPageLayouts: List<PageTextLayout> = emptyList(),
         fontPathResolver: (String?) -> String? = { it },
         rasterOverlays: List<PdfiumRasterOverlay> = emptyList(),
         pageSizes: List<PdfiumPageSize> = emptyList()
     ): PdfiumAnnotationExportPayload {
         val exportPayload = SharedPdfAnnotationExportMapper.build(
-            sharedExportAnnotations(
-                inkAnnotations = inkAnnotations,
-                highlights = highlights,
-                customHighlightColors = customHighlightColors,
-                pageSizes = pageSizes
-            )
+            sharedAnnotations
         )
         val inkItems = exportPayload.inkAnnotations
         val inkPointsForExport = inkItems.map { annotation ->
@@ -405,11 +410,18 @@ internal object PdfiumAnnotationExporter {
         inkAnnotations.entries.forEach { (pageIndex, pageAnnotations) ->
             pageAnnotations.forEach { annotation ->
                 if (annotation.type != AnnotationType.INK) return@forEach
+                val tool = annotation.inkType.toSharedPdfInkTool()
+                val kind = when (tool) {
+                    PdfInkTool.RECTANGLE, PdfInkTool.ELLIPSE, PdfInkTool.LINE, PdfInkTool.ARROW -> PdfAnnotationKind.SHAPE
+                    PdfInkTool.IMAGE -> PdfAnnotationKind.IMAGE
+                    PdfInkTool.STICKY_NOTE -> PdfAnnotationKind.STICKY_NOTE
+                    else -> PdfAnnotationKind.INK
+                }
                 annotations += SharedPdfAnnotation(
                     id = annotation.id,
                     pageIndex = pageIndex,
-                    kind = PdfAnnotationKind.INK,
-                    tool = annotation.inkType.toSharedPdfInkTool(),
+                    kind = kind,
+                    tool = tool,
                     points = annotation.points.map { point ->
                         PdfPagePoint(point.x, point.y, point.timestamp)
                     },
@@ -449,6 +461,12 @@ internal object PdfiumAnnotationExporter {
             InkType.FOUNTAIN_PEN -> PdfInkTool.FOUNTAIN_PEN
             InkType.PENCIL -> PdfInkTool.PENCIL
             InkType.TEXT -> PdfInkTool.TEXT
+            InkType.RECTANGLE -> PdfInkTool.RECTANGLE
+            InkType.ELLIPSE -> PdfInkTool.ELLIPSE
+            InkType.LINE -> PdfInkTool.LINE
+            InkType.ARROW -> PdfInkTool.ARROW
+            InkType.IMAGE -> PdfInkTool.IMAGE
+            InkType.STICKY_NOTE -> PdfInkTool.STICKY_NOTE
         }
     }
 
@@ -460,6 +478,12 @@ internal object PdfiumAnnotationExporter {
             PdfInkTool.PENCIL -> InkType.PENCIL.ordinal
             PdfInkTool.TEXT -> InkType.TEXT.ordinal
             PdfInkTool.ERASER -> InkType.ERASER.ordinal
+            PdfInkTool.RECTANGLE -> InkType.RECTANGLE.ordinal
+            PdfInkTool.ELLIPSE -> InkType.ELLIPSE.ordinal
+            PdfInkTool.LINE -> InkType.LINE.ordinal
+            PdfInkTool.ARROW -> InkType.ARROW.ordinal
+            PdfInkTool.IMAGE -> InkType.IMAGE.ordinal
+            PdfInkTool.STICKY_NOTE -> InkType.STICKY_NOTE.ordinal
             PdfInkTool.NONE,
             PdfInkTool.PEN -> InkType.PEN.ordinal
         }
@@ -480,6 +504,41 @@ internal object PdfiumAnnotationExporter {
             right = pdfRight / pageWidth,
             bottom = (pageHeight - pdfBottom) / pageHeight
         )
+    }
+
+    private fun buildImageRasterOverlays(
+        context: Context,
+        annotations: List<SharedPdfAnnotation>,
+        pageSizes: List<PdfiumPageSize>
+    ): List<PdfiumRasterOverlay> {
+        return annotations.mapNotNull { annotation ->
+            val bounds = annotation.bounds ?: return@mapNotNull null
+            val imagePath = annotation.imagePath ?: return@mapNotNull null
+            
+            val bitmap = try {
+                android.graphics.BitmapFactory.decodeFile(imagePath)
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to load image for export at path: \$imagePath")
+                null
+            } ?: return@mapNotNull null
+
+            val width = bitmap.width
+            val height = bitmap.height
+            val pixels = IntArray(width * height)
+            bitmap.getPixels(pixels, 0, width, 0, 0, width, height)
+            bitmap.recycle()
+
+            PdfiumRasterOverlay(
+                pageIndex = annotation.pageIndex,
+                left = bounds.left,
+                top = bounds.top,
+                right = bounds.right,
+                bottom = bounds.bottom,
+                width = width,
+                height = height,
+                pixels = pixels
+            )
+        }
     }
 
     private fun buildTextRasterOverlays(

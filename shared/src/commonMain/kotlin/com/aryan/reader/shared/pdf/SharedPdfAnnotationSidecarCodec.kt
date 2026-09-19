@@ -306,13 +306,22 @@ object SharedPdfAnnotationSidecarCodec {
             val tool = obj.string("inkType")
                 ?: obj.string("type")
                 ?: PdfInkTool.PEN.name
+            
+            val kind = when (tool) {
+                PdfInkTool.RECTANGLE.name, PdfInkTool.ELLIPSE.name, PdfInkTool.LINE.name, PdfInkTool.ARROW.name -> PdfAnnotationKind.SHAPE
+                PdfInkTool.IMAGE.name -> PdfAnnotationKind.IMAGE
+                PdfInkTool.STICKY_NOTE.name -> PdfAnnotationKind.STICKY_NOTE
+                else -> PdfAnnotationKind.INK
+            }
+
             SharedPdfAnnotation(
                 id = obj.string("id") ?: stableAnnotationId("ink", element),
                 pageIndex = obj.int("pageIndex") ?: return@mapNotNull null,
-                kind = PdfAnnotationKind.INK,
+                kind = kind,
                 tool = tool.toPdfInkTool(),
                 points = points,
                 note = obj.string("note"),
+                imagePath = obj.string("imagePath"),
                 colorArgb = obj.int("color") ?: SharedPdfAnnotationDefaults.configFor(PdfInkTool.PEN).colorArgb,
                 strokeWidth = obj.float("strokeWidth") ?: SharedPdfAnnotationDefaults.configFor(PdfInkTool.PEN).strokeWidth,
                 createdAt = points.firstOrNull()?.timestamp ?: 0L
@@ -386,7 +395,7 @@ object SharedPdfAnnotationSidecarCodec {
 
     private fun List<SharedPdfAnnotation>.toLegacyAndroidInkArray(): JsonArray {
         return JsonArray(
-            filter { it.kind == PdfAnnotationKind.INK && it.points.isNotEmpty() }
+            filter { (it.kind == PdfAnnotationKind.INK || it.kind == PdfAnnotationKind.SHAPE || it.kind == PdfAnnotationKind.IMAGE || it.kind == PdfAnnotationKind.STICKY_NOTE) && it.points.isNotEmpty() }
                 .map { annotation ->
                     JsonObject(
                         buildMap {
@@ -397,6 +406,7 @@ object SharedPdfAnnotationSidecarCodec {
                             put("color", JsonPrimitive(annotation.colorArgb))
                             put("strokeWidth", JsonPrimitive(annotation.strokeWidth.toDouble()))
                             annotation.note?.takeIf { it.isNotBlank() }?.let { put("note", JsonPrimitive(it)) }
+                            annotation.imagePath?.takeIf { it.isNotBlank() }?.let { put("imagePath", JsonPrimitive(it)) }
                             put(
                                 "points",
                                 JsonArray(

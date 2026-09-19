@@ -2,4 +2,6 @@
 <paths>
     <!-- Corresponds to context.cacheDir/shared_files/ -->
     <cache-path name="shared_files" path="shared_files/" />
+    <cache-path name="split" path="split/" />
+    <external-files-path name="downloads" path="Download/" />
 </paths>

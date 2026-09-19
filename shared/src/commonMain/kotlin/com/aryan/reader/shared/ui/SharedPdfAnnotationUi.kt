@@ -117,12 +117,19 @@ val SharedPdfAnnotationDefaultTools: List<PdfInkTool> = listOf(
     PdfInkTool.HIGHLIGHTER,
     PdfInkTool.HIGHLIGHTER_ROUND,
     PdfInkTool.TEXT,
+    PdfInkTool.RECTANGLE,
+    PdfInkTool.ELLIPSE,
+    PdfInkTool.LINE,
+    PdfInkTool.ARROW,
+    PdfInkTool.IMAGE,
+    PdfInkTool.STICKY_NOTE,
     PdfInkTool.ERASER
 )
 
 internal enum class SharedPdfAnnotationSettingsPanel {
     PEN,
     HIGHLIGHTER,
+    SHAPES,
     ERASER
 }
 
@@ -132,6 +139,9 @@ internal enum class SharedPdfInteractionDockItem {
     PEN,
     HIGHLIGHTER,
     TEXT_NOTE,
+    SHAPES,
+    IMAGE,
+    STICKY_NOTE,
     ERASER,
     UNDO,
     REDO,
@@ -153,6 +163,15 @@ internal fun sharedPdfInteractionDockItems(
     }
     if (PdfInkTool.TEXT in availableTools) {
         add(SharedPdfInteractionDockItem.TEXT_NOTE)
+    }
+    if (availableTools.any { it in listOf(PdfInkTool.RECTANGLE, PdfInkTool.ELLIPSE, PdfInkTool.LINE, PdfInkTool.ARROW) }) {
+        add(SharedPdfInteractionDockItem.SHAPES)
+    }
+    if (PdfInkTool.IMAGE in availableTools) {
+        add(SharedPdfInteractionDockItem.IMAGE)
+    }
+    if (PdfInkTool.STICKY_NOTE in availableTools) {
+        add(SharedPdfInteractionDockItem.STICKY_NOTE)
     }
     if (PdfInkTool.ERASER in availableTools) {
         add(SharedPdfInteractionDockItem.ERASER)
@@ -199,6 +218,7 @@ fun SharedPdfInteractionDock(
     val dockItems = remember(availableTools) { sharedPdfInteractionDockItems(availableTools) }
     val penTools = remember(availableTools) { availableTools.filter(PdfInkTool::isDesktopPenTool) }
     val highlighterTools = remember(availableTools) { availableTools.filter(PdfInkTool::isDesktopHighlighter) }
+    val shapeTools = remember(availableTools) { availableTools.filter { it in listOf(PdfInkTool.RECTANGLE, PdfInkTool.ELLIPSE, PdfInkTool.LINE, PdfInkTool.ARROW) } }
 
     fun toolConfig(tool: PdfInkTool): PdfToolConfig {
         return toolConfigs[tool] ?: SharedPdfAnnotationDefaults.configFor(tool)
@@ -224,6 +244,13 @@ fun SharedPdfInteractionDock(
                 ?: PdfInkTool.HIGHLIGHTER
         )
     }
+    var lastShapeTool by remember(shapeTools) {
+        mutableStateOf(
+            selectedTool.takeIf { it in shapeTools }
+                ?: shapeTools.firstOrNull()
+                ?: PdfInkTool.RECTANGLE
+        )
+    }
     var activeSettingsPanel by remember { mutableStateOf<SharedPdfAnnotationSettingsPanel?>(null) }
     var showClearPageConfirmation by remember { mutableStateOf(false) }
 
@@ -233,18 +260,20 @@ fun SharedPdfInteractionDock(
         lastActivePenTool,
         lastActiveHighlighterTool,
         penTools,
-        highlighterTools
+        highlighterTools,
+        shapeTools
     ) {
         when {
             selectedTool in penTools -> lastPenTool = selectedTool
             selectedTool in highlighterTools -> lastHighlighterTool = selectedTool
+            selectedTool in shapeTools -> lastShapeTool = selectedTool
             selectedTool != PdfInkTool.ERASER -> {
                 lastActivePenTool.takeIf { it in penTools }?.let { lastPenTool = it }
                 lastActiveHighlighterTool.takeIf { it in highlighterTools }?.let { lastHighlighterTool = it }
                 activeSettingsPanel = null
             }
         }
-        if (isTextSelectionMode || selectedTool == PdfInkTool.NONE || selectedTool == PdfInkTool.TEXT) {
+        if (isTextSelectionMode || selectedTool == PdfInkTool.NONE || selectedTool == PdfInkTool.TEXT || selectedTool == PdfInkTool.IMAGE || selectedTool == PdfInkTool.STICKY_NOTE) {
             activeSettingsPanel = null
         }
     }
@@ -271,11 +300,13 @@ fun SharedPdfInteractionDock(
                 val panelTools = when (panel) {
                     SharedPdfAnnotationSettingsPanel.PEN -> penTools
                     SharedPdfAnnotationSettingsPanel.HIGHLIGHTER -> highlighterTools
+                    SharedPdfAnnotationSettingsPanel.SHAPES -> shapeTools
                     SharedPdfAnnotationSettingsPanel.ERASER -> listOf(PdfInkTool.ERASER)
                 }
                 val panelTool = when (panel) {
                     SharedPdfAnnotationSettingsPanel.PEN -> selectedTool.takeIf { it in penTools } ?: lastPenTool
                     SharedPdfAnnotationSettingsPanel.HIGHLIGHTER -> selectedTool.takeIf { it in highlighterTools } ?: lastHighlighterTool
+                    SharedPdfAnnotationSettingsPanel.SHAPES -> selectedTool.takeIf { it in shapeTools } ?: lastShapeTool
                     SharedPdfAnnotationSettingsPanel.ERASER -> PdfInkTool.ERASER
                 }
                 SharedPdfAnnotationToolSettingsPanel(
@@ -291,6 +322,7 @@ fun SharedPdfInteractionDock(
                         when (panel) {
                             SharedPdfAnnotationSettingsPanel.PEN -> lastPenTool = tool
                             SharedPdfAnnotationSettingsPanel.HIGHLIGHTER -> lastHighlighterTool = tool
+                            SharedPdfAnnotationSettingsPanel.SHAPES -> lastShapeTool = tool
                             SharedPdfAnnotationSettingsPanel.ERASER -> Unit
                         }
                         onToolSelected(tool)
@@ -301,6 +333,7 @@ fun SharedPdfInteractionDock(
                         when (panel) {
                             SharedPdfAnnotationSettingsPanel.PEN -> onPenPaletteChange(nextPalette)
                             SharedPdfAnnotationSettingsPanel.HIGHLIGHTER -> onHighlighterPaletteChange(nextPalette)
+                            SharedPdfAnnotationSettingsPanel.SHAPES -> onPenPaletteChange(nextPalette)
                             SharedPdfAnnotationSettingsPanel.ERASER -> Unit
                         }
                     },
@@ -436,6 +469,43 @@ fun SharedPdfInteractionDock(
                     )
                 }
 
+                if (SharedPdfInteractionDockItem.SHAPES in dockItems) {
+                    val tool = selectedTool.takeIf { it in shapeTools } ?: lastShapeTool
+                    SharedPdfToolButton(
+                        tool = tool,
+                        selected = !isTextSelectionMode && selectedTool in shapeTools,
+                        color = toolColor(tool),
+                        strokeWidth = strokeWidth,
+                        onClick = { selectToolWithSettings(tool, SharedPdfAnnotationSettingsPanel.SHAPES) }
+                    )
+                }
+
+                if (SharedPdfInteractionDockItem.IMAGE in dockItems) {
+                    SharedPdfToolButton(
+                        tool = PdfInkTool.IMAGE,
+                        selected = !isTextSelectionMode && selectedTool == PdfInkTool.IMAGE,
+                        color = toolColor(PdfInkTool.IMAGE),
+                        strokeWidth = strokeWidth,
+                        onClick = {
+                            activeSettingsPanel = null
+                            onToolSelected(PdfInkTool.IMAGE)
+                        }
+                    )
+                }
+
+                if (SharedPdfInteractionDockItem.STICKY_NOTE in dockItems) {
+                    SharedPdfToolButton(
+                        tool = PdfInkTool.STICKY_NOTE,
+                        selected = !isTextSelectionMode && selectedTool == PdfInkTool.STICKY_NOTE,
+                        color = toolColor(PdfInkTool.STICKY_NOTE),
+                        strokeWidth = strokeWidth,
+                        onClick = {
+                            activeSettingsPanel = null
+                            onToolSelected(PdfInkTool.STICKY_NOTE)
+                        }
+                    )
+                }
+
                 if (SharedPdfInteractionDockItem.ERASER in dockItems) {
                     SharedPdfToolButton(
                         tool = PdfInkTool.ERASER,
@@ -548,14 +618,18 @@ fun SharedPdfAnnotationToolDock(
         .filter { it in availableTools }
     val highlighterTools = listOf(PdfInkTool.HIGHLIGHTER, PdfInkTool.HIGHLIGHTER_ROUND)
         .filter { it in availableTools }
+    val shapeTools = listOf(PdfInkTool.RECTANGLE, PdfInkTool.ELLIPSE, PdfInkTool.LINE, PdfInkTool.ARROW)
+        .filter { it in availableTools }
     var lastPenTool by remember { mutableStateOf(PdfInkTool.PEN) }
     var lastHighlighterTool by remember { mutableStateOf(PdfInkTool.HIGHLIGHTER) }
+    var lastShapeTool by remember { mutableStateOf(PdfInkTool.RECTANGLE) }
     var activeSettingsPanel by remember { mutableStateOf<SharedPdfAnnotationSettingsPanel?>(null) }
 
     LaunchedEffect(selectedTool) {
         when {
             selectedTool in penTools -> lastPenTool = selectedTool
             selectedTool in highlighterTools -> lastHighlighterTool = selectedTool
+            selectedTool in shapeTools -> lastShapeTool = selectedTool
             selectedTool != PdfInkTool.ERASER -> activeSettingsPanel = null
         }
     }
@@ -617,6 +691,46 @@ fun SharedPdfAnnotationToolDock(
                         }
                     )
                 }
+                
+                if (shapeTools.isNotEmpty()) {
+                    val tool = selectedTool.takeIf { it in shapeTools } ?: lastShapeTool.takeIf { it in shapeTools } ?: shapeTools.first()
+                    SharedPdfToolButton(
+                        tool = tool,
+                        selectedTool = selectedTool,
+                        selectedColor = selectedColor,
+                        strokeWidth = strokeWidth,
+                        onToolSelected = {
+                            onToolSelected(tool)
+                            activeSettingsPanel = SharedPdfAnnotationSettingsPanel.SHAPES
+                        }
+                    )
+                }
+
+                if (PdfInkTool.IMAGE in availableTools) {
+                    SharedPdfToolButton(
+                        tool = PdfInkTool.IMAGE,
+                        selectedTool = selectedTool,
+                        selectedColor = selectedColor,
+                        strokeWidth = strokeWidth,
+                        onToolSelected = {
+                            activeSettingsPanel = null
+                            onToolSelected(PdfInkTool.IMAGE)
+                        }
+                    )
+                }
+
+                if (PdfInkTool.STICKY_NOTE in availableTools) {
+                    SharedPdfToolButton(
+                        tool = PdfInkTool.STICKY_NOTE,
+                        selectedTool = selectedTool,
+                        selectedColor = selectedColor,
+                        strokeWidth = strokeWidth,
+                        onToolSelected = {
+                            activeSettingsPanel = null
+                            onToolSelected(PdfInkTool.STICKY_NOTE)
+                        }
+                    )
+                }
 
                 if (PdfInkTool.ERASER in availableTools) {
                     SharedPdfToolButton(
@@ -661,12 +775,14 @@ fun SharedPdfAnnotationToolDock(
             val toolsForPanel = when (panel) {
                 SharedPdfAnnotationSettingsPanel.PEN -> penTools
                 SharedPdfAnnotationSettingsPanel.HIGHLIGHTER -> highlighterTools
+                SharedPdfAnnotationSettingsPanel.SHAPES -> shapeTools
                 SharedPdfAnnotationSettingsPanel.ERASER -> listOf(PdfInkTool.ERASER).filter { it in availableTools }
             }
             if (toolsForPanel.isNotEmpty()) {
                 val panelTool = when (panel) {
                     SharedPdfAnnotationSettingsPanel.PEN -> selectedTool.takeIf { it in penTools } ?: lastPenTool
                     SharedPdfAnnotationSettingsPanel.HIGHLIGHTER -> selectedTool.takeIf { it in highlighterTools } ?: lastHighlighterTool
+                    SharedPdfAnnotationSettingsPanel.SHAPES -> selectedTool.takeIf { it in shapeTools } ?: lastShapeTool
                     SharedPdfAnnotationSettingsPanel.ERASER -> PdfInkTool.ERASER
                 }
                 SharedPdfAnnotationToolSettingsPanel(
@@ -682,6 +798,7 @@ fun SharedPdfAnnotationToolDock(
                         when (panel) {
                             SharedPdfAnnotationSettingsPanel.PEN -> lastPenTool = tool
                             SharedPdfAnnotationSettingsPanel.HIGHLIGHTER -> lastHighlighterTool = tool
+                            SharedPdfAnnotationSettingsPanel.SHAPES -> lastShapeTool = tool
                             SharedPdfAnnotationSettingsPanel.ERASER -> Unit
                         }
                         onToolSelected(tool)

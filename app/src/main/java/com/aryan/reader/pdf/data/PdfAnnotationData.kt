@@ -68,7 +68,8 @@ data class PdfAnnotation(
     val color: Color,
     val strokeWidth: Float,
     val id: String = UUID.randomUUID().toString(),
-    val note: String? = null
+    val note: String? = null,
+    val imagePath: String? = null
 )
 
 object AnnotationSerializer {
@@ -83,6 +84,7 @@ object AnnotationSerializer {
                 strokeWidth = annotation.strokeWidth,
                 points = annotation.points.map { PdfPagePoint(it.x, it.y, it.timestamp) },
                 note = annotation.note,
+                imagePath = annotation.imagePath,
             )
         })
     }
@@ -114,6 +116,7 @@ object AnnotationSerializer {
                 strokeWidth = annotation.strokeWidth,
                 id = annotation.id,
                 note = annotation.note,
+                imagePath = annotation.imagePath,
             )
             resultMap.getOrPut(androidAnnotation.pageIndex) { mutableListOf() }.add(androidAnnotation)
         }
