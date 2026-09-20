@@ -26,6 +26,9 @@ jobs:
           ref: main
           fetch-depth: 0
 
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        
       - name: Build OSS releases
         shell: bash
         env:
@@ -33,22 +36,33 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p release-assets
+          
+          # Prepare gradle cache directory to be writable by Docker container
+          mkdir -p ~/.gradle
+          chmod -R 777 ~/.gradle
+          
           docker pull "$FDROID_BUILDSERVER_IMAGE"
           docker run --rm \
             --volume "$GITHUB_WORKSPACE:/home/vagrant/build/com.aryan.reader.oss" \
             --volume "$GITHUB_WORKSPACE/release-assets:/release-assets" \
+            --volume "$HOME/.gradle:/home/vagrant/.gradle" \
             "$FDROID_BUILDSERVER_IMAGE" \
             bash -lc '
               set -euo pipefail
               source /etc/profile.d/bsenv.sh
               cd /home/vagrant/build/com.aryan.reader.oss
+              
+              export GRADLE_USER_HOME=/home/vagrant/.gradle
+              
               sed -i -e "/jogamp/d" -e "/https.jitpack/d" settings.gradle.kts
-              ./gradlew :app:assembleOssRelease --no-build-cache --max-workers=1 -Pkotlin.daemon.jvmargs=-Xmx4g
-              ./gradlew :app:assembleOssReleaseOffline --no-build-cache --max-workers=1 -Pkotlin.daemon.jvmargs=-Xmx4g
+              ./gradlew :app:assembleOssRelease --build-cache --parallel -Pkotlin.daemon.jvmargs=-Xmx4g
+              ./gradlew :app:assembleOssReleaseOffline --build-cache --parallel -Pkotlin.daemon.jvmargs=-Xmx4g
               cp app/build/outputs/renamed-apk/ossRelease/*.apk /release-assets/
               cp app/build/outputs/renamed-apk/ossReleaseOffline/*.apk /release-assets/
             '
-          sudo chown -R "$(id -u):$(id -g)" release-assets
+          
+          # Restore ownership so GitHub Actions cache can save ~/.gradle properly
+          sudo chown -R "$(id -u):$(id -g)" release-assets ~/.gradle
 
       - name: Create or update draft release
         shell: bash
