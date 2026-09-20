@@ -122,6 +122,8 @@ android {
             val storePath = localProperties.getProperty("MYAPP_RELEASE_STORE_FILE")
             if (!storePath.isNullOrEmpty()) {
                 signingConfig = signingConfigs.getByName("release")
+            } else {
+                signingConfig = signingConfigs.getByName("debug")
             }
             isMinifyEnabled = true
             isShrinkResources = true
