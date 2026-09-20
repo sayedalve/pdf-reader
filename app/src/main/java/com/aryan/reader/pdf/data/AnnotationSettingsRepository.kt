@@ -142,6 +142,12 @@ class AnnotationSettingsRepository(context: Context) {
                 InkType.HIGHLIGHTER_ROUND -> ToolConfig("#8CFFEB3B".toColorInt(), 0.035f)
                 InkType.ERASER -> ToolConfig(android.graphics.Color.WHITE, 0.03f)
                 InkType.TEXT -> ToolConfig(android.graphics.Color.BLACK, 0.02f)
+                InkType.RECTANGLE,
+                InkType.ELLIPSE,
+                InkType.LINE,
+                InkType.ARROW -> ToolConfig(android.graphics.Color.BLUE, 0.008f)
+                InkType.IMAGE -> ToolConfig(android.graphics.Color.TRANSPARENT, 0.0f)
+                InkType.STICKY_NOTE -> ToolConfig(android.graphics.Color.YELLOW, 0.0f)
             }
         }
     }

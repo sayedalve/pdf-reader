@@ -1,4 +1,4 @@
-﻿package com.aryan.reader.pdf.editor
+package com.aryan.reader.pdf.editor
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -12,7 +12,7 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.RotateRight
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -78,7 +78,7 @@ fun PageOrganizerScreen(
                     TextButton(onClick = { viewModel.selectAll() }) { Text("Select All") }
                     TextButton(onClick = { viewModel.clearSelection() }) { Text("Clear") }
                     IconButton(onClick = { viewModel.deleteSelected() }) { Icon(Icons.Default.Delete, contentDescription = "Delete Selected") }
-                    IconButton(onClick = { viewModel.rotateSelected() }) { Icon(Icons.Default.RotateRight, contentDescription = "Rotate Selected") }
+                    IconButton(onClick = { viewModel.rotateSelected() }) { Icon(Icons.Default.Refresh, contentDescription = "Rotate Selected") }
                 }
                 
                 LazyVerticalGrid(
@@ -105,7 +105,7 @@ fun PageOrganizerScreen(
                                 Text("Page {page.originalIndex + 1}", style = MaterialTheme.typography.bodySmall)
                                 Row {
                                     IconButton(onClick = { viewModel.rotatePage(page.originalIndex) }) {
-                                        Icon(Icons.Default.RotateRight, contentDescription = "Rotate")
+                                        Icon(Icons.Default.Refresh, contentDescription = "Rotate")
                                     }
                                     IconButton(onClick = { viewModel.deletePage(uiState.pages.indexOf(page)) }) {
                                         Icon(Icons.Default.Delete, contentDescription = "Delete")

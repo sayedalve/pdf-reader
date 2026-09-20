@@ -1,10 +1,10 @@
-﻿package com.aryan.reader.pdf.editor
+package com.aryan.reader.pdf.editor
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -34,7 +34,7 @@ fun SplitPdfScreen(
         floatingActionButton = {
             if (uiState.sourceUri == null) {
                 FloatingActionButton(onClick = { filePicker.launch(arrayOf("application/pdf")) }) {
-                    Icon(Icons.Default.FolderOpen, contentDescription = "Select PDF")
+                    Icon(Icons.Default.Add, contentDescription = "Select PDF")
                 }
             }
         }
