@@ -225,6 +225,38 @@ fun SharedPdfAndroidAnnotationDock(
                         iconSizeDp = iconSize,
                         onClick = { if (!isMinimized) onToolClick(PdfInkTool.ERASER) },
                     )
+
+                    val isShapeActive = selectedTool in listOf(PdfInkTool.RECTANGLE, PdfInkTool.ELLIPSE, PdfInkTool.LINE, PdfInkTool.ARROW)
+                    val activeShapeTool = if (isShapeActive) selectedTool else PdfInkTool.RECTANGLE
+                    SharedPdfDockIcon(
+                        tool = activeShapeTool,
+                        isActive = isShapeActive && !isMinimized,
+                        tintColor = if (isMinimized) Color.Gray else Color.White,
+                        description = "Shapes",
+                        sizeDp = buttonSize,
+                        iconSizeDp = iconSize,
+                        onClick = { if (!isMinimized) onToolClick(activeShapeTool) },
+                    )
+
+                    SharedPdfDockIcon(
+                        tool = PdfInkTool.IMAGE,
+                        isActive = (selectedTool == PdfInkTool.IMAGE) && !isMinimized,
+                        tintColor = if (isMinimized) Color.Gray else Color.White,
+                        description = "Image",
+                        sizeDp = buttonSize,
+                        iconSizeDp = iconSize,
+                        onClick = { if (!isMinimized) onToolClick(PdfInkTool.IMAGE) },
+                    )
+
+                    SharedPdfDockIcon(
+                        tool = PdfInkTool.STICKY_NOTE,
+                        isActive = (selectedTool == PdfInkTool.STICKY_NOTE) && !isMinimized,
+                        tintColor = if (isMinimized) Color.Gray else Color.White,
+                        description = "Sticky Note",
+                        sizeDp = buttonSize,
+                        iconSizeDp = iconSize,
+                        onClick = { if (!isMinimized) onToolClick(PdfInkTool.STICKY_NOTE) },
+                    )
                 }
 
                 Box(
